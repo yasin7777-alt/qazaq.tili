@@ -18,7 +18,6 @@ export default defineConfig(async ({ mode }) => {
   }
 
   return { 
-    base: '/qazaq.tili/',
     plugins,
     envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
     define: processEnvDefines,
