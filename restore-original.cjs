@@ -1,0 +1,31 @@
+const fs = require('fs');
+const {parse} = require('@babel/parser');
+const traverse = require('@babel/traverse').default;
+const generate = require('@babel/generator').default;
+const t = require('@babel/types');
+const source = fs.readFileSync('reference/app-extract.js', 'utf8');
+const ast = parse(source, {sourceType: 'module'});
+const names = {ST:'Modal',za:'translate',Si:'categories',Je:'lessons',ms:'words',co:'proverbs',ds:'quizQuestions',ba:'matchingWords',uy:'wordPuzzles',Nf:'GameResult',TT:'QuizGame',jT:'MatchingGame',ET:'WordGame',Wu:'emptyProgress',P0:'STORAGE_KEY',MT:'loadProgress',ue:'Ornament',zT:'galleryItems',NT:'OriginalApp',CT:'SmallSpark'};
+const aliases = {k:'React',xs:'motion',Ci:'X',Pu:'Trophy',_o:'Sparkles',Ni:'RotateCcw',P3:'CircleHelp',Pn:'Check','$0':'Lightbulb',Ta:'ArrowRight',ps:'CircleCheck',bi:'BookOpen',uT:'Music2',sT:'Landmark',iy:'Flower2',De:'ArrowUpRight',oo:'Clock3',cy:'ShieldCheck',U3:'ArrowLeft',sy:'ExternalLink',oy:'Search',ry:'Sprout',ay:'Bookmark',ju:'Award',ly:'Layers',ES:'MotionConfig',X3:'ChevronDown',cT:'Menu',gu:'AnimatePresence',dT:'Play',V3:'ArrowDown',AT:'Volume2',Z3:'ChevronLeft',J3:'ChevronRight',nT:'Heart'};
+traverse(ast, {Program(p){for(const [a,b] of Object.entries(names))if(p.scope.hasBinding(a))p.scope.rename(a,b);}, ReferencedIdentifier(p){if(aliases[p.node.name]&&!p.scope.hasBinding(p.node.name))p.node.name=aliases[p.node.name];}});
+traverse(ast,{FunctionDeclaration(p){if(p.node.id.name==='OriginalApp') {const vars={a:'lang',i:'setLang',o:'menuOpen',c:'setMenuOpen',u:'activeSection',p:'setActiveSection',d:'modal',y:'setModal',g:'progress',m:'setProgress',x:'toast',A:'setToast',S:'wordIndex',O:'setWordIndex',M:'wordTab',w:'setWordTab',q:'flipped',Y:'setFlipped',X:'galleryFilter',Q:'setGalleryFilter',Z:'catalogFilter',nt:'setCatalogFilter',ct:'search',F:'setSearch','$':'speaking',st:'setSpeaking',b:'text',ht:'totalXP',ot:'currentWord','$t':'level',Ct:'notify',Mt:'navigateTo',K:'saveWord',P:'speakWord',ft:'completeLesson',yt:'openCatalog',j:'changeWord',L:'navigation',J:'categoryIcon',W:'lessonList',rt:'renderGallery',mt:'renderModal'};for(const [a,b] of Object.entries(vars))p.scope.rename(a,b);}}});
+const jsxName = node => t.isStringLiteral(node) ? t.jsxIdentifier(node.value) : t.isMemberExpression(node) ? t.jsxMemberExpression(jsxName(node.object),jsxName(node.property)) : t.jsxIdentifier(node.name);
+traverse(ast,{CallExpression:{exit(p){const n=p.node;if(!t.isMemberExpression(n.callee)||!t.isIdentifier(n.callee.object,{name:'f'})||!['jsx','jsxs'].includes(n.callee.property.name))return;const [tag,props,key]=n.arguments; if(!t.isObjectExpression(props))throw new Error('Unexpected JSX props');const attrs=[];let children=[];for(const prop of props.properties){if(t.isSpreadElement(prop)){attrs.push(t.jsxSpreadAttribute(prop.argument));continue;}const name=prop.key.name??prop.key.value;if(name==='data-source-loc')continue;if(name==='children'){const list=t.isArrayExpression(prop.value)?prop.value.elements:[prop.value];children=list.map(v=>t.isJSXElement(v)||t.isJSXFragment(v)?v:t.jsxExpressionContainer(v));}else attrs.push(t.jsxAttribute(t.jsxIdentifier(name), t.isStringLiteral(prop.value)?prop.value:t.jsxExpressionContainer(prop.value)));}if(key)attrs.unshift(t.jsxAttribute(t.jsxIdentifier('key'),t.jsxExpressionContainer(key)));if(t.isMemberExpression(tag)&&tag.object.name==='f'&&tag.property.name==='Fragment')p.replaceWith(t.jsxFragment(t.jsxOpeningFragment(),t.jsxClosingFragment(),children));else{const name=jsxName(tag);p.replaceWith(t.jsxElement(t.jsxOpeningElement(name,attrs,children.length===0),children.length?t.jsxClosingElement(name):null,children));}}}});
+const imports=`import React from 'react';\nimport { motion, AnimatePresence, MotionConfig } from 'framer-motion';\nimport { ${[...new Set(Object.values(aliases))].filter(x=>!['React','motion','AnimatePresence','MotionConfig'].includes(x)).join(', ')} } from 'lucide-react';\nimport { JourneyRoute, KazakhstanMap } from './Journey';\nimport { useExperience } from '../lib/useExperience';\n`;
+let result=generate(ast,{comments:false}).code;
+result=result.replace('function OriginalApp() {','export default function OriginalApp() {\n  useExperience();');
+result=result.replace(/<motion.div className="hero-copy" initial=\{[^}]+\} animate=\{[^}]+\} transition=\{[^}]+\}/g, '<motion.div className="hero-copy"');
+// Remove the original group-level entrance; V2 sequences each individual hero element.
+result=result.replace(/(className="hero-(?:copy|art)") initial=\{\{[\s\S]*?\}\} animate=\{\{[\s\S]*?\}\} transition=\{\{[\s\S]*?\}\}/g,'$1');
+result=result.replace('<div className="category-grid">',`<JourneyRoute lang={lang} onSelect={(stage) => { if(stage === 0) setModal({type:'category', id:'language'}); if(stage === 1) {setGalleryFilter('people');navigateTo('heritage');} if(stage === 2) setModal({type:'category', id:'traditions'}); if(stage === 3) {setGalleryFilter('tradition');navigateTo('heritage');} if(stage === 4) navigateTo('kazakhstan'); if(stage === 5) setModal({type:'game',game:'quiz'}); }} /><div className="category-grid">`);
+result=result.replace('<section className="closing-section container">','<KazakhstanMap lang={lang} /><section className="closing-section container">');
+// Give the question subtree a key so each next question receives a brief, calm reveal.
+result=result.replace('<h2 className="question-title">','<h2 key={o} className="question-title">');
+result=result.replace('<div className="quiz-options">','<div key={o} className="quiz-options">');
+result=result.replace('style={{\n            width: `${(o + 1) / quizQuestions.length * 100}%`\n          }}','style={{ transform: `scaleX(${(o + 1) / quizQuestions.length})`, transformOrigin: "left" }}');
+fs.mkdirSync('src/components',{recursive:true});
+fs.writeFileSync('src/components/OriginalApp.jsx',imports+result);
+// Retain original CSS and layout, with a baseline readability correction in every breakpoint.
+let css=fs.readFileSync('reference/original.css','utf8').split('@property')[0];
+css=css.replace(/font-size:([\d.]+)px/g,(m,n)=>{n=Number(n);return n<16?`font-size:${Math.max(13,Math.round(n*1.2*10)/10)}px`:m});
+fs.writeFileSync('src/original.css',css);
